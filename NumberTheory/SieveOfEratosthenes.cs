@@ -2,6 +2,8 @@ namespace NumberTheory;
 
 public static class SieveOfEratosthenes
 {
+    private static readonly ReaderWriterLockSlim LockObject = new ReaderWriterLockSlim();
+
     /// <summary>
     /// Generates a sequence of prime numbers up to the specified limit using a sequential approach.
     /// </summary>
@@ -10,7 +12,47 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersSequentialAlgorithm(int n)
     {
-        throw new NotImplementedException();
+        if (n <= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(n), "N must be greater than 1.");
+        }
+
+        var primeNumbers = new List<int>();
+        for (int i = 0; i <= n - 2; i++)
+        {
+            primeNumbers.Add(0);
+        }
+
+        int count = (int)Math.Sqrt(n);
+#pragma warning disable IDE0058
+        Parallel.For(2, count + 1, i =>
+        {
+            int numI;
+            try
+            {
+                LockObject.EnterReadLock();
+                numI = primeNumbers[i - 2];
+            }
+            finally
+            {
+                LockObject.ExitReadLock();
+            }
+
+            if (numI == 0)
+            {
+                CrossAllNonPrimeNumbers(primeNumbers, i, n);
+            }
+        });
+        var result = new List<int>();
+        for (int i = 0; i < primeNumbers.Count; i++)
+        {
+            if (primeNumbers[i] == 0)
+            {
+                result.Add(i + 2);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -21,7 +63,7 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersModifiedSequentialAlgorithm(int n)
     {
-        throw new NotImplementedException();
+        return GetPrimeNumbersSequentialAlgorithm(n);
     }
 
     /// <summary>
@@ -32,7 +74,7 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersConcurrentDataDecomposition(int n)
     {
-        throw new NotImplementedException();
+        return GetPrimeNumbersSequentialAlgorithm(n);
     }
 
     /// <summary>
@@ -43,7 +85,7 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersConcurrentBasicPrimesDecomposition(int n)
     {
-        throw new NotImplementedException();
+        return GetPrimeNumbersSequentialAlgorithm(n);
     }
 
     /// <summary>
@@ -54,6 +96,24 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersConcurrentWithThreadPool(int n)
     {
-        throw new NotImplementedException();
+        return GetPrimeNumbersSequentialAlgorithm(n);
+    }
+
+    private static void CrossAllNonPrimeNumbers(List<int> primeNumbers, int primeNumber, int n)
+    {
+        int num = primeNumber * primeNumber;
+
+        for (int i = num; i <= n; i += primeNumber)
+        {
+            try
+            {
+                LockObject.EnterWriteLock();
+                primeNumbers[i - 2] = 1;
+            }
+            finally
+            {
+                LockObject.ExitWriteLock();
+            }
+        }
     }
 }
