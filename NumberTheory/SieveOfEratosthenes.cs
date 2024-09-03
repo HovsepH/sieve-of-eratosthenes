@@ -24,25 +24,14 @@ public static class SieveOfEratosthenes
         }
 
         int count = (int)Math.Sqrt(n);
-#pragma warning disable IDE0058
-        Parallel.For(2, count + 1, i =>
+        for (int i = 2; i <= count; i++)
         {
-            int numI;
-            try
-            {
-                LockObject.EnterReadLock();
-                numI = primeNumbers[i - 2];
-            }
-            finally
-            {
-                LockObject.ExitReadLock();
-            }
-
-            if (numI == 0)
+            if (primeNumbers[i - 2] == 0)
             {
                 CrossAllNonPrimeNumbers(primeNumbers, i, n);
             }
-        });
+        }
+
         var result = new List<int>();
         for (int i = 0; i < primeNumbers.Count; i++)
         {
@@ -63,7 +52,49 @@ public static class SieveOfEratosthenes
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the input <paramref name="n"/> is less than or equal to 0.</exception>
     public static IEnumerable<int> GetPrimeNumbersModifiedSequentialAlgorithm(int n)
     {
-        return GetPrimeNumbersSequentialAlgorithm(n);
+        if (n <= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(n), "N must be greater than 1.");
+        }
+
+        var primeFlags = new List<int>();
+        var primeNumbersUpToSqrtN = GetPrimeNumbersSequentialAlgorithm((int)Math.Sqrt(n)).ToList();
+        for (int i = 0; i < n - (int)Math.Sqrt(n); i++)
+        {
+            primeFlags.Add(0);
+        }
+
+        var threads = new List<Thread>();
+
+        for (int i = 0; i < primeNumbersUpToSqrtN.Count; i++)
+        {
+            int prime = primeNumbersUpToSqrtN[i]; // Capture the loop variable to avoid closure issues
+            var thread = new Thread(() => MarkNonPrimesInRange(primeFlags, n, prime));
+            threads.Add(thread);
+            thread.Start();
+        }
+
+        // Wait for all threads to complete
+        foreach (var thread in threads)
+        {
+            thread.Join();
+        }
+
+        var primeNumbersAfterSqrtN = new List<int>();
+        var sqrt = (int)Math.Sqrt(n);
+
+        for (int i = 0; i < primeFlags.Count; i++)
+        {
+            if (primeFlags[i] == 0)
+            {
+                primeNumbersAfterSqrtN.Add(i + sqrt + 1);
+            }
+        }
+
+        List<int> mergedList = new List<int>(primeNumbersUpToSqrtN);
+        mergedList.AddRange(primeNumbersAfterSqrtN);
+
+        return mergedList;
     }
 
     /// <summary>
@@ -105,14 +136,27 @@ public static class SieveOfEratosthenes
 
         for (int i = num; i <= n; i += primeNumber)
         {
-            try
+            primeNumbers[i - 2] = 1;
+        }
+    }
+
+    private static void MarkNonPrimesInRange(List<int> primeFlags, int upperLimit, int primeFactor)
+    {
+        int firstCandidateAboveSqrtN = (int)Math.Sqrt(upperLimit) + 1;
+        int firstMultipleOfPrimeFactor = firstCandidateAboveSqrtN;
+
+        while (firstMultipleOfPrimeFactor % primeFactor != 0 && firstMultipleOfPrimeFactor <= upperLimit)
+        {
+            ++firstMultipleOfPrimeFactor;
+        }
+
+        var startIndex = firstMultipleOfPrimeFactor - firstCandidateAboveSqrtN;
+
+        for (int i = startIndex; i < primeFlags.Count; i += primeFactor)
+        {
+            lock (LockObject)
             {
-                LockObject.EnterWriteLock();
-                primeNumbers[i - 2] = 1;
-            }
-            finally
-            {
-                LockObject.ExitWriteLock();
+                primeFlags[i] = 1; // Assuming 1 means not a prime
             }
         }
     }
